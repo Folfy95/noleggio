@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Gestione Noleggio</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; max-width: 900px; margin: auto; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+    tr.rientrato { background-color: #ffe6e6; }
+    form > * { margin: 5px; }
+
+    /* Popup Style */
+    #popup {
+      display: none; 
+      position: fixed; 
+      top: 0; 
+      left: 0; 
+      width: 100%; 
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5); 
+      justify-content: center; 
+      align-items: center; 
+      z-index: 1000;
+    }
+    .popup-content {
+      background: #fff; 
+      padding: 20px; 
+      border-radius: 5px; 
+      text-align: center; 
+      max-width: 400px;
+    }
+    .popup-content button {
+      margin: 5px;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>Nuovo Noleggio</h2>
+  <form id="rentalForm">
+    <input id="nome" placeholder="Nome" required>
+    <input id="cognome" placeholder="Cognome" required>
+    <select id="tipoMezzo" required>
+      <option value="">Tipo mezzo</option>
+      <option value="Pedalò">Pedalò</option>
+      <option value="SUP">SUP</option>
+      <option value="Kayak">Kayak</option>
+    </select>
+    <select id="numeroMezzo" required>
+      <option value="">Numero mezzo</option>
+    </select>
+    <input type="datetime-local" id="partenza" required>
+    <select id="durata">
+      <option value="30">30 minuti</option>
+      <option value="60">1 ora</option>
+      <option value="120">2 ore</option>
+    </select>
+    <label><input type="checkbox" id="doc"> Ritira documento</label>
+    <button type="submit">Avvia Noleggio</button>
+  </form>
+
+  <h2>Gestione Noleggi</h2>
+  <button onclick="esportaCSV()">📤 Esporta prenotazioni per data</button>
+  <input type="date" id="dataExport">
+  <button onclick="cancellaStorico()">🗑️ Cancella storico</button>
+
+  <table id="lista">
+    <tr>
+      <th>Cliente</th><th>Mezzo</th><th>Rientro</th><th>Doc</th><th>Azioni</th>
+    </tr>
+  </table>
+
+  <script>
+    const mezzi = {
+      'Pedalò': [1, 2, 3, 4],
+      'SUP': [1, 2],
+      'Kayak': [1, 2, 3]
+    };
+
+    const rentals = [];
+
+    const tipoMezzoSelect = document.getElementById('tipoMezzo');
+    const numeroMezzoSelect = document.getElementById('numeroMezzo');
+
+    tipoMezzoSelect.addEventListener('change', updateNumeriDisponibili);
+
+    function updateNumeriDisponibili() {
+      const tipo = tipoMezzoSelect.value;
+      numeroMezzoSelect.innerHTML = '<option value="">Numero mezzo</option>';
+      if (!tipo || !mezzi[tipo]) return;
+
+      const numeriDisponibili = mezzi[tipo].filter(n =>
+        !rentals.some(r => r.tipo === tipo && r.num === n && !r.rientrato)
+      );
+
+      numeriDisponibili.forEach(n => {
+        const opt = document.createElement('option');
+        opt.value = n;
+        opt.textContent = n;
+        numeroMezzoSelect.appendChild(opt);
+      });
+    }
+
+    document.getElementById('rentalForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const nome = document.getElementById('nome').value.trim();
+      const cognome = document.getElementById('cognome').value.trim();
+      const tipo = tipoMezzoSelect.value;
+      const num = parseInt(numeroMezzoSelect.value);
+      const part = new Date(document.getElementById('partenza').value);
+      const dur = parseInt(document.getElementById('durata').value);
+      const doc = document.getElementById('doc').checked ? 'Sì' : 'No';
+
+      const rientro = new Date(part.getTime() + dur * 60000);
+      const id = Date.now(); // ID univoco
+
+      rentals.push({
+        id, nome, cognome, tipo, num, partenza: part, durata: dur,
+        rientro, doc, rientrato: false
+      });
+
+      setAlertForReturn(id, rientro);  // Imposta avviso per il rientro
+
+      salvaDati();
+      renderList();
+      updateNumeriDisponibili();
+      e.target.reset();
+      resetOrario();
+    });
+
+	// Funzione per eliminare un noleggio
+	  function eliminaNoleggio(id) {
+		const index = rentals.findIndex(r => r.id === id);
+		if (index !== -1) {
+		  rentals.splice(index, 1); // Rimuove l'elemento dall'array rentals
+		  salvaDati(); // Salva i dati aggiornati
+		  renderList(); // Rende di nuovo la lista aggiornata
+		}
+	  }
+
+	  // Funzione per renderizzare la lista dei noleggi
+	  function renderList() {
+		const tbody = document.getElementById('lista');
+		tbody.innerHTML = `
+		  <tr>
+			<th>Cliente</th><th>Mezzo</th><th>Rientro</th><th>Doc</th><th>Azioni</th>
+		  </tr>
+		`;
+
+		rentals.forEach(r => {
+		  const tr = document.createElement('tr');
+		  if (r.rientrato) tr.classList.add('rientrato');
+
+		  tr.innerHTML = `
+			<td>${r.nome} ${r.cognome}</td>
+			<td>${r.tipo} #${r.num}</td>
+			<td>${new Date(r.rientro).toLocaleString()}</td>
+			<td>${r.doc}</td>
+			<td>
+			  ${r.rientrato
+				? '✅ Rientrato'
+				: `<button onclick="confermaRientro(${r.id})">Segna come rientrato</button>`
+			  }
+			  <button onclick="eliminaNoleggio(${r.id})">❌ Elimina</button>
+			</td>
+		  `;
+		  tbody.appendChild(tr);
+		});
+	  }
+
+    function confermaRientro(id) {
+      const index = rentals.findIndex(r => r.id === id);
+      if (index > -1) {
+        const r = rentals[index];
+        r.rientrato = true;
+        salvaDati();
+        renderList();
+        updateNumeriDisponibili();
+      }
+    }
+
+    // Funzione per impostare un avviso al momento del rientro
+    function setAlertForReturn(id, rientro) {
+      const now = new Date();
+      const msUntilReturn = rientro - now;  // Tempo rimanente fino al rientro
+
+      if (msUntilReturn > 0) {
+        setTimeout(() => {
+          showPopup(id);
+        }, msUntilReturn);
+      }
+    }
+
+    // Funzione per mostrare il popup
+    function showPopup(id) {
+      const rental = rentals.find(r => r.id === id);
+      const now = new Date();
+      const ritardo = Math.max(0, Math.floor((now - rental.rientro) / 60000));  // Calcolo dei minuti di ritardo
+
+      const popup = document.getElementById('popup');
+      const popupText = document.getElementById('popupText');
+      const popupTitle = document.getElementById('popupTitle');
+
+      popupTitle.textContent = `${rental.tipo} #${rental.num}`;
+      popupText.innerHTML = `
+        Rientro previsto: ${new Date(rental.rientro).toLocaleString()}<br>
+        Ritardo: ${ritardo} minuti
+      `;
+
+      // Mostra il popup
+      popup.style.display = 'flex';
+
+      document.getElementById('confermaRientro').onclick = function() {
+        confermaRientro(rental.id);  // Segna come rientrato
+        popup.style.display = 'none';  // Chiudi popup
+      };
+
+      document.getElementById('posticipaRientro').onclick = function() {
+        rental.rientro = new Date(rental.rientro.getTime() + 5 * 60000);  // Posticipa di 5 minuti
+        setAlertForReturn(rental.id, rental.rientro);  // Reimposta l'avviso
+        popup.style.display = 'none';  // Chiudi popup
+      };
+    }
+
+    // Funzione per chiudere il popup se l'utente clicca fuori dal popup
+    window.onclick = function(event) {
+      const popup = document.getElementById('popup');
+      if (event.target === popup) {
+        popup.style.display = 'none';
+      }
+    };
+
+    // Funzione per reset della data di partenza
+    function resetOrario() {
+      const partenzaInput = document.getElementById('partenza');
+      const now = new Date();
+      now.setMinutes(now.getMinutes() + 5 - (now.getMinutes() % 5));
+      now.setSeconds(0);
+      now.setMilliseconds(0);
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      const d = String(now.getDate()).padStart(2, '0');
+      const h = String(now.getHours()).padStart(2, '0');
+      const min = String(now.getMinutes()).padStart(2, '0');
+      partenzaInput.value = `${y}-${m}-${d}T${h}:${min}`;
+    }
+
+    function salvaDati() {
+      localStorage.setItem('noleggi', JSON.stringify(rentals));
+    }
+
+    function caricaDati() {
+      const dati = localStorage.getItem('noleggi');
+      if (dati) {
+        const arr = JSON.parse(dati);
+        rentals.length = 0;
+        arr.forEach(r => {
+          r.rientro = new Date(r.rientro);
+          r.partenza = new Date(r.partenza);
+          rentals.push(r);
+        });
+      }
+    }
+
+    function esportaCSV() {
+      const dataInput = document.getElementById('dataExport').value;
+      if (!dataInput) {
+        alert("Seleziona una data.");
+        return;
+      }
+
+      const prenotazioni = rentals.filter(r => {
+        const data = r.partenza.toISOString().slice(0, 10);
+        return data === dataInput;
+      });
+
+      if (prenotazioni.length === 0) {
+        alert("Nessuna prenotazione trovata per questa data.");
+        return;
+      }
+
+      const righe = [
+        ['Nome', 'Cognome', 'Tipo', 'Numero', 'Partenza', 'Rientro', 'Durata (min)', 'Doc', 'Rientrato']
+      ];
+
+      prenotazioni.forEach(r => {
+        righe.push([r.nome, r.cognome, r.tipo, r.num,
+          r.partenza.toLocaleString(), r.rientro.toLocaleString(),
+          r.durata, r.doc, r.rientrato ? 'Sì' : 'No']);
+      });
+
+      const csv = righe.map(r => r.join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `prenotazioni_${dataInput}.csv`;
+      link.click();
+    }
+
+    function cancellaStorico() {
+      if (confirm("Vuoi davvero cancellare tutto lo storico?")) {
+        rentals.length = 0;
+        localStorage.removeItem('noleggi');
+        renderList();
+        updateNumeriDisponibili();
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      caricaDati();
+      renderList();
+      resetOrario();
+    });
+  </script>
+
+  <!-- Popup -->
+  <div id="popup">
+    <div class="popup-content">
+      <h3 id="popupTitle">Rientro mezzo</h3>
+      <p id="popupText"></p>
+      <button id="confermaRientro">✅ Conferma rientro</button>
+      <button id="posticipaRientro">🔁 Posticipa di 5 minuti</button>
+    </div>
+  </div>
+
+</body>
+</html>
