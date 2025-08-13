@@ -1,0 +1,52 @@
+/* Aggiungi personalizzazioni CSS se necessarie */
+body {
+    font-family: Arial, sans-serif;
+}
+
+.container {
+    margin-top: 50px;
+}
+
+h1, h2 {
+    color: #007bff;
+}
+
+h3 {
+    font-weight: bold;
+}
+
+button {
+    margin-top: 10px;
+}
+
+table {
+    width: 100%;
+    margin-top: 20px;
+}
+
+th, td {
+    text-align: center;
+    padding: 8px;
+}
+
+th {
+    background-color: #f2f2f2;
+}
+/* Aggiungi margine tra le colonne */
+.row > .col-12 {
+  margin-bottom: 15px; /* Distanza tra le righe */
+}
+
+/* Aggiungi padding e bordi alle colonne per migliorare l'aspetto */
+.card {
+  padding: 15px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+}
+
+/* Aggiungi margine tra le colonne per la versione desktop */
+@media (min-width: 992px) {
+  .row > .col-lg-6 {
+    margin-bottom: 30px;
+  }
+}
